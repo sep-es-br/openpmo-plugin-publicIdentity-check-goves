@@ -1,0 +1,42 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+group = 'br.gov.es.pmo'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    api 'br.gov.es.pmo:openpmo-plugin-public-identity-check-interface:1.0.0'
+
+    implementation 'org.springframework.boot:spring-boot-autoconfigure:2.2.12.RELEASE'
+    implementation 'org.springframework.security:spring-security-oauth2-client:5.2.12.RELEASE'
+    implementation 'org.apache.httpcomponents:httpclient:4.5.12'
+    implementation 'org.json:json:20190722'
+    implementation 'com.github.sep-es-br:pmo-core-identity-parser:1.0.6'
+
+    testImplementation 'junit:junit:4.13.2'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
