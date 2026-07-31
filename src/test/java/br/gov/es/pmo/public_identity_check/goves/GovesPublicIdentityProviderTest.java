@@ -63,7 +63,24 @@ public class GovesPublicIdentityProviderTest {
         assertEquals(PublicIdentityType.CITIZEN, result.getType());
         assertEquals("citizen-sub", result.getSub());
         assertEquals("citizen@example.com", result.getEmail());
+        assertEquals("citizen", result.getName());
         assertTrue(result.getAssignments().isEmpty());
+    }
+
+    @Test
+    public void shouldKeepOrdinaryCitizenFoundWhenEmailIsUnavailable() {
+        this.gateway.respond("GET", "/api/cidadao/12345678900", 200, "{}");
+        this.gateway.respond("PUT", "/api/cidadao/12345678900/pesquisaSub", 200,
+            "{\"sub\":\"citizen-sub\"}");
+        this.gateway.respond("GET", "/api/agentepublico/citizen-sub", 404, "");
+        this.gateway.respond("GET", "/api/cidadao/citizen-sub/email", 503, "");
+
+        final PublicIdentityResult result = this.provider.findByCpf("12345678900");
+
+        assertEquals(PublicIdentityStatus.FOUND, result.getStatus());
+        assertEquals(PublicIdentityType.CITIZEN, result.getType());
+        assertEquals("citizen-sub", result.getSub());
+        assertEquals(null, result.getEmail());
     }
 
     @Test

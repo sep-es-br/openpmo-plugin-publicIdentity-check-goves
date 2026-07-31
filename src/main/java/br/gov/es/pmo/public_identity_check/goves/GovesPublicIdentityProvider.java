@@ -189,15 +189,15 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
         final String cpf,
         final String sub,
         final String token
-    ) throws IOException {
-        final GovesHttpResponse emailResponse = this.getEmail(sub, token);
-        if(emailResponse.getStatusCode() != HTTP_OK) {
-            return PublicIdentityResult.unavailable(cpf);
-        }
-        final JSONObject emailJson = new JSONObject(emailResponse.getBody());
-        final String email = value(emailJson, "email", "Email");
-        final String corporateEmail = value(emailJson, "corporativo", "Corporativo");
-        final String name = isBlank(email) ? null : email.split("@")[0];
+    ) {
+        final JSONObject emailJson = this.loadEmailIfAvailable(sub, token);
+        final String email = emailJson == null
+            ? null
+            : value(emailJson, "email", "Email");
+        final String corporateEmail = emailJson == null
+            ? null
+            : value(emailJson, "corporativo", "Corporativo");
+        final String name = nameFromEmail(email);
         return PublicIdentityResult.found(
             PublicIdentityType.CITIZEN,
             cpf,
@@ -219,11 +219,7 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
         final JSONObject agent = new JSONObject(agentResponse.getBody());
         final String sub = firstNotBlank(value(agent, "Sub", "sub"), requestedSub);
 
-        final GovesHttpResponse emailResponse = this.getEmail(sub, token);
-        if(emailResponse.getStatusCode() != HTTP_OK) {
-            return PublicIdentityResult.unavailable(cpf);
-        }
-        final JSONObject email = new JSONObject(emailResponse.getBody());
+        final JSONObject email = this.loadEmailIfAvailable(sub, token);
 
         final GovesHttpResponse rolesResponse = this.http.exchange(
             "GET",
@@ -249,12 +245,25 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
             value(agent, "Nome", "nome"),
             value(agent, "Apelido", "apelido"),
             firstNotBlank(
-                value(email, "email", "Email"),
+                email == null ? null : value(email, "email", "Email"),
                 value(agent, "Email", "email")
             ),
-            value(email, "corporativo", "Corporativo"),
+            email == null ? null : value(email, "corporativo", "Corporativo"),
             assignments
         );
+    }
+
+    private JSONObject loadEmailIfAvailable(final String sub, final String token) {
+        try {
+            final GovesHttpResponse response = this.getEmail(sub, token);
+            if(response.getStatusCode() != HTTP_OK || isBlank(response.getBody())) {
+                return null;
+            }
+            return new JSONObject(response.getBody());
+        }
+        catch(final RuntimeException | IOException ignored) {
+            return null;
+        }
     }
 
     private GovesHttpResponse getEmail(final String sub, final String token) throws IOException {
@@ -358,6 +367,12 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
 
     private static String firstNotBlank(final String first, final String second) {
         return isBlank(first) ? second : first;
+    }
+
+    private static String nameFromEmail(final String email) {
+        if(isBlank(email)) return null;
+        final int separator = email.indexOf('@');
+        return separator > 0 ? email.substring(0, separator) : null;
     }
 
     private static boolean isBlank(final String value) {
