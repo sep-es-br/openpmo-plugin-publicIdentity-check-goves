@@ -43,17 +43,17 @@ public class GovesPublicIdentityProviderTest {
     public void shouldNotCallPesquisaSubWhenCitizenDoesNotExist() {
         this.gateway.respond("GET", "/api/cidadao/12345678900", 404, "");
 
-        final PublicIdentityResult result = this.provider.findByCpf("123.456.789-00");
+        final PublicIdentityResult result = this.provider.findByCpf("12345678900");
 
         assertEquals(PublicIdentityStatus.NOT_FOUND, result.getStatus());
         assertFalse(this.gateway.wasCalled("PUT", "/api/cidadao/12345678900/pesquisaSub"));
     }
 
     @Test
-    public void shouldReturnOrdinaryCitizenWhenAgentEndpointReturnsNotFound() {
+    public void shouldReturnOrdinaryCitizenWhenRolesEndpointReturnsNotFound() {
         this.gateway.respond("GET", "/api/cidadao/12345678900", 200, "{}");
         this.gateway.respond("PUT", "/api/cidadao/12345678900/pesquisaSub", 200, "{\"sub\":\"citizen-sub\"}");
-        this.gateway.respond("GET", "/api/agentepublico/citizen-sub", 404, "");
+        this.gateway.respond("GET", "/api/agentepublico/citizen-sub/papeis", 404, "");
         this.gateway.respond("GET", "/api/cidadao/citizen-sub/email", 200,
             "{\"email\":\"citizen@example.com\",\"corporativo\":\"\"}");
 
@@ -72,7 +72,7 @@ public class GovesPublicIdentityProviderTest {
         this.gateway.respond("GET", "/api/cidadao/12345678900", 200, "{}");
         this.gateway.respond("PUT", "/api/cidadao/12345678900/pesquisaSub", 200,
             "{\"sub\":\"citizen-sub\"}");
-        this.gateway.respond("GET", "/api/agentepublico/citizen-sub", 404, "");
+        this.gateway.respond("GET", "/api/agentepublico/citizen-sub/papeis", 404, "");
         this.gateway.respond("GET", "/api/cidadao/citizen-sub/email", 503, "");
 
         final PublicIdentityResult result = this.provider.findByCpf("12345678900");
@@ -84,25 +84,51 @@ public class GovesPublicIdentityProviderTest {
     }
 
     @Test
-    public void shouldLoadAgentRolesAndCacheOrganization() {
+    public void shouldUsePrioritizedRoleAndLoadItsOrganization() {
         this.gateway.respond("GET", "/api/cidadao/12345678900", 200, "{}");
         this.gateway.respond("PUT", "/api/cidadao/12345678900/pesquisaSub", 200, "{\"sub\":\"agent-sub\"}");
-        this.gateway.respond("GET", "/api/agentepublico/agent-sub", 200,
-            "{\"Sub\":\"agent-sub\",\"Nome\":\"Maria Silva\",\"Apelido\":\"Maria\",\"Email\":\"maria@example.com\"}");
         this.gateway.respond("GET", "/api/cidadao/agent-sub/email", 200,
             "{\"email\":\"maria@example.com\",\"corporativo\":\"maria@work.example\"}");
         this.gateway.respond("GET", "/api/agentepublico/agent-sub/papeis", 200,
-            "[{\"Guid\":\"role-1\",\"Nome\":\"Gestora\",\"Tipo\":\"Cargo\",\"LotacaoGuid\":\"org-1\"},"
-                + "{\"Guid\":\"role-2\",\"Nome\":\"Fiscal\",\"Tipo\":\"Papel\",\"LotacaoGuid\":\"org-1\"}]");
-        this.gateway.respond("GET", "/organizations/org-1/info", 200,
-            "{\"guid\":\"org-1\",\"razaoSocial\":\"Secretaria\",\"nomeFantasia\":\"SEP\",\"sigla\":\"SEP\",\"guidOrganizacaoPai\":\"root\"}");
+            "[{\"Guid\":\"role-1\",\"Nome\":\"Gestora\",\"Tipo\":\"Cargo\",\"LotacaoGuid\":\"org-1\","
+                + "\"AgentePublicoSub\":\"agent-sub\",\"AgentePublicoNome\":\"Maria Silva\",\"Prioritario\":false},"
+                + "{\"Guid\":\"role-2\",\"Nome\":\"Fiscal\",\"Tipo\":\"Papel\",\"LotacaoGuid\":\"org-2\","
+                + "\"AgentePublicoSub\":\"agent-sub\",\"AgentePublicoNome\":\"Maria Silva\",\"Prioritario\":true}]");
+        this.gateway.respond("GET", "/organizations/org-2/info", 200,
+            "{\"guid\":\"org-2\",\"razaoSocial\":\"Secretaria\",\"nomeFantasia\":\"SEP\",\"sigla\":\"SEP\",\"guidOrganizacaoPai\":\"root\"}");
 
         final PublicIdentityResult result = this.provider.findByCpf("12345678900");
 
         assertEquals(PublicIdentityType.PUBLIC_AGENT, result.getType());
-        assertEquals(2, result.getAssignments().size());
+        assertEquals("Maria Silva", result.getName());
+        assertEquals(1, result.getAssignments().size());
+        assertEquals("role-2", result.getAssignments().get(0).getRoleGuid());
         assertEquals("SEP", result.getAssignments().get(0).getOrganization().getAbbreviation());
-        assertEquals(1, this.gateway.countCalls("GET", "/organizations/org-1/info"));
+        assertFalse(this.gateway.wasCalled("GET", "/organizations/org-1/info"));
+        assertEquals(1, this.gateway.countCalls("GET", "/organizations/org-2/info"));
+    }
+
+    @Test
+    public void shouldUseFirstRoleWhenNoRoleIsPrioritized() {
+        this.gateway.respond("GET", "/api/cidadao/12345678900", 200, "{}");
+        this.gateway.respond("PUT", "/api/cidadao/12345678900/pesquisaSub", 200,
+            "{\"sub\":\"agent-sub\"}");
+        this.gateway.respond("GET", "/api/cidadao/agent-sub/email", 503, "");
+        this.gateway.respond("GET", "/api/agentepublico/agent-sub/papeis", 200,
+            "[{\"Guid\":\"role-1\",\"Nome\":\"Gestora\",\"Tipo\":\"Cargo\",\"LotacaoGuid\":\"org-1\","
+                + "\"AgentePublicoSub\":\"agent-sub\",\"AgentePublicoNome\":\"Maria Silva\",\"Prioritario\":false},"
+                + "{\"Guid\":\"role-2\",\"Nome\":\"Fiscal\",\"Tipo\":\"Papel\",\"LotacaoGuid\":\"org-2\","
+                + "\"AgentePublicoSub\":\"agent-sub\",\"AgentePublicoNome\":\"Maria Silva\",\"Prioritario\":false}]");
+        this.gateway.respond("GET", "/organizations/org-1/info", 200,
+            "{\"guid\":\"org-1\",\"razaoSocial\":\"Secretaria\",\"nomeFantasia\":\"SEGER\",\"sigla\":\"SEGER\",\"guidOrganizacaoPai\":\"root\"}");
+
+        final PublicIdentityResult result = this.provider.findByCpf("12345678900");
+
+        assertEquals(PublicIdentityType.PUBLIC_AGENT, result.getType());
+        assertEquals(1, result.getAssignments().size());
+        assertEquals("role-1", result.getAssignments().get(0).getRoleGuid());
+        assertEquals("SEGER", result.getAssignments().get(0).getOrganization().getAbbreviation());
+        assertFalse(this.gateway.wasCalled("GET", "/organizations/org-2/info"));
     }
 
     @Test

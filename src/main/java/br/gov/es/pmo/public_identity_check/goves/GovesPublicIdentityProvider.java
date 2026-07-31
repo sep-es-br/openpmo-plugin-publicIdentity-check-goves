@@ -45,54 +45,55 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
 
     @Override
     public PublicIdentityResult findByCpf(final String cpf) {
-        final String normalizedCpf = normalizeCpf(cpf);
-        if(normalizedCpf.length() != 11) {
-            return PublicIdentityResult.notFound(normalizedCpf);
-        }
-
         try {
             final String token = this.tokenProvider.getAcessoCidadaoToken();
             final GovesHttpResponse citizen = this.http.exchange(
                 "GET",
                 this.properties.getAcessoCidadaoBaseUrl(),
-                "/api/cidadao/" + normalizedCpf,
+                "/api/cidadao/" + cpf,
                 token
             );
 
             if(citizen.getStatusCode() == HTTP_NOT_FOUND) {
-                return PublicIdentityResult.notFound(normalizedCpf);
+                return PublicIdentityResult.notFound(cpf);
             }
             if(citizen.getStatusCode() != HTTP_OK) {
-                return PublicIdentityResult.unavailable(normalizedCpf);
+                return PublicIdentityResult.unavailable(cpf);
             }
 
             final GovesHttpResponse subResponse = this.http.exchange(
                 "PUT",
                 this.properties.getAcessoCidadaoBaseUrl(),
-                "/api/cidadao/" + normalizedCpf + "/pesquisaSub",
+                "/api/cidadao/" + cpf + "/pesquisaSub",
                 token
             );
             if(subResponse.getStatusCode() != HTTP_OK) {
-                return PublicIdentityResult.unavailable(normalizedCpf);
+                return PublicIdentityResult.unavailable(cpf);
             }
 
             final JSONObject subJson = new JSONObject(subResponse.getBody());
             final String sub = value(subJson, "sub", "Sub");
             if(isBlank(sub)) {
-                return PublicIdentityResult.unavailable(normalizedCpf);
+                return PublicIdentityResult.unavailable(cpf);
             }
 
-            final GovesHttpResponse agentResponse = this.getPublicAgent(sub, token);
-            if(agentResponse.getStatusCode() == HTTP_NOT_FOUND) {
-                return this.loadCitizen(normalizedCpf, sub, token);
+            final GovesHttpResponse rolesResponse = this.getPublicAgentRoles(sub, token);
+            if(rolesResponse.getStatusCode() == HTTP_NOT_FOUND) {
+                return this.loadCitizen(cpf, sub, token);
             }
-            if(agentResponse.getStatusCode() != HTTP_OK) {
-                return PublicIdentityResult.unavailable(normalizedCpf);
+            if(rolesResponse.getStatusCode() != HTTP_OK) {
+                return PublicIdentityResult.unavailable(cpf);
             }
-            return this.loadPublicAgent(normalizedCpf, sub, agentResponse, token);
+            final JSONObject prioritizedRole = selectPrioritizedRole(
+                new JSONArray(rolesResponse.getBody())
+            );
+            if(prioritizedRole == null) {
+                return this.loadCitizen(cpf, sub, token);
+            }
+            return this.loadPublicAgent(cpf, sub, prioritizedRole, token);
         }
         catch(final RuntimeException | IOException e) {
-            return PublicIdentityResult.unavailable(normalizedCpf);
+            return PublicIdentityResult.unavailable(cpf);
         }
     }
 
@@ -162,25 +163,31 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
         }
         try {
             final String token = this.tokenProvider.getAcessoCidadaoToken();
-            final GovesHttpResponse agentResponse = this.getPublicAgent(sub, token);
-            if(agentResponse.getStatusCode() == HTTP_NOT_FOUND) {
+            final GovesHttpResponse rolesResponse = this.getPublicAgentRoles(sub, token);
+            if(rolesResponse.getStatusCode() == HTTP_NOT_FOUND) {
                 return PublicIdentityResult.notFound(null);
             }
-            if(agentResponse.getStatusCode() != HTTP_OK) {
+            if(rolesResponse.getStatusCode() != HTTP_OK) {
                 return PublicIdentityResult.unavailable(null);
             }
-            return this.loadPublicAgent(null, sub, agentResponse, token);
+            final JSONObject prioritizedRole = selectPrioritizedRole(
+                new JSONArray(rolesResponse.getBody())
+            );
+            if(prioritizedRole == null) {
+                return PublicIdentityResult.notFound(null);
+            }
+            return this.loadPublicAgent(null, sub, prioritizedRole, token);
         }
         catch(final RuntimeException | IOException e) {
             return PublicIdentityResult.unavailable(null);
         }
     }
 
-    private GovesHttpResponse getPublicAgent(final String sub, final String token) throws IOException {
+    private GovesHttpResponse getPublicAgentRoles(final String sub, final String token) throws IOException {
         return this.http.exchange(
             "GET",
             this.properties.getAcessoCidadaoBaseUrl(),
-            "/api/agentepublico/" + sub,
+            "/api/agentepublico/" + sub + "/papeis",
             token
         );
     }
@@ -213,43 +220,34 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
     private PublicIdentityResult loadPublicAgent(
         final String cpf,
         final String requestedSub,
-        final GovesHttpResponse agentResponse,
+        final JSONObject prioritizedRole,
         final String token
     ) throws IOException {
-        final JSONObject agent = new JSONObject(agentResponse.getBody());
-        final String sub = firstNotBlank(value(agent, "Sub", "sub"), requestedSub);
+        final String sub = firstNotBlank(
+            value(prioritizedRole, "AgentePublicoSub", "agentePublicoSub"),
+            requestedSub
+        );
 
         final JSONObject email = this.loadEmailIfAvailable(sub, token);
-
-        final GovesHttpResponse rolesResponse = this.http.exchange(
-            "GET",
-            this.properties.getAcessoCidadaoBaseUrl(),
-            "/api/agentepublico/" + sub + "/papeis",
-            token
-        );
-        if(rolesResponse.getStatusCode() != HTTP_OK) {
+        final PublicAgentAssignment assignment = this.mapAssignment(prioritizedRole);
+        if(assignment == null) {
             return PublicIdentityResult.unavailable(cpf);
         }
-
-        final List<PublicAgentAssignment> assignments = this.mapAssignments(
-            new JSONArray(rolesResponse.getBody())
+        final String name = value(
+            prioritizedRole,
+            "AgentePublicoNome",
+            "agentePublicoNome"
         );
-        if(assignments == null) {
-            return PublicIdentityResult.unavailable(cpf);
-        }
 
         return PublicIdentityResult.found(
             PublicIdentityType.PUBLIC_AGENT,
             cpf,
             sub,
-            value(agent, "Nome", "nome"),
-            value(agent, "Apelido", "apelido"),
-            firstNotBlank(
-                email == null ? null : value(email, "email", "Email"),
-                value(agent, "Email", "email")
-            ),
+            name,
+            name,
+            email == null ? null : value(email, "email", "Email"),
             email == null ? null : value(email, "corporativo", "Corporativo"),
-            assignments
+            Collections.singletonList(assignment)
         );
     }
 
@@ -275,28 +273,37 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
         );
     }
 
-    private List<PublicAgentAssignment> mapAssignments(final JSONArray roles) throws IOException {
-        final List<PublicAgentAssignment> assignments = new ArrayList<>();
+    private PublicAgentAssignment mapAssignment(final JSONObject role) throws IOException {
         final String organizationToken = this.tokenProvider.getOrganizationToken();
+        final String organizationGuid = value(role, "LotacaoGuid", "lotacaoGuid");
+        OrganizationInfo organization = null;
+        if(!isBlank(organizationGuid)) {
+            organization = this.getOrganization(organizationGuid, organizationToken);
+            if(organization == null) {
+                return null;
+            }
+        }
+        return new PublicAgentAssignment(
+            value(role, "Guid", "guid"),
+            value(role, "Nome", "nome"),
+            value(role, "Tipo", "tipo"),
+            organization
+        );
+    }
+
+    private static JSONObject selectPrioritizedRole(final JSONArray roles) {
+        JSONObject firstRole = null;
         for(int i = 0; i < roles.length(); i++) {
             final JSONObject role = roles.optJSONObject(i);
             if(role == null) continue;
-            final String organizationGuid = value(role, "LotacaoGuid", "lotacaoGuid");
-            OrganizationInfo organization = null;
-            if(!isBlank(organizationGuid)) {
-                organization = this.getOrganization(organizationGuid, organizationToken);
-                if(organization == null) {
-                    return null;
-                }
+            if(firstRole == null) {
+                firstRole = role;
             }
-            assignments.add(new PublicAgentAssignment(
-                value(role, "Guid", "guid"),
-                value(role, "Nome", "nome"),
-                value(role, "Tipo", "tipo"),
-                organization
-            ));
+            if(role.optBoolean("Prioritario", role.optBoolean("prioritario", false))) {
+                return role;
+            }
         }
-        return assignments;
+        return firstRole;
     }
 
     private OrganizationInfo getOrganization(
@@ -344,10 +351,6 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
             }
         }
         return null;
-    }
-
-    private static String normalizeCpf(final String cpf) {
-        return cpf == null ? "" : cpf.replaceAll("\\D", "");
     }
 
     private static String normalizeText(final String value) {
