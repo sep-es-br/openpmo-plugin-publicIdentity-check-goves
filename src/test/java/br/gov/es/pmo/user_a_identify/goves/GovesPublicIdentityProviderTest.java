@@ -1,13 +1,13 @@
-package br.gov.es.pmo.public_identity_check.goves;
+package br.gov.es.pmo.user_a_identify.goves;
 
-import br.gov.es.pmo.public_identity_check.goves.client.GovesClientTokenProvider;
-import br.gov.es.pmo.public_identity_check.goves.client.GovesHttpGateway;
-import br.gov.es.pmo.public_identity_check.goves.client.GovesHttpResponse;
-import br.gov.es.pmo.public_identity_check.goves.configuration.GovesPublicIdentityProperties;
-import br.gov.es.pmo.public_identity_check.model.PublicAgentSearchResult;
-import br.gov.es.pmo.public_identity_check.model.PublicIdentityResult;
-import br.gov.es.pmo.public_identity_check.model.PublicIdentityStatus;
-import br.gov.es.pmo.public_identity_check.model.PublicIdentityType;
+import br.gov.es.pmo.user_a_identify.goves.client.GovesClientTokenProvider;
+import br.gov.es.pmo.user_a_identify.goves.client.GovesHttpGateway;
+import br.gov.es.pmo.user_a_identify.goves.client.GovesHttpResponse;
+import br.gov.es.pmo.user_a_identify.goves.configuration.GovesPublicIdentityProperties;
+import br.gov.es.pmo.user_a_identify.model.PublicAgentSearchResult;
+import br.gov.es.pmo.user_a_identify.model.PublicIdentityResult;
+import br.gov.es.pmo.user_a_identify.model.PublicIdentityStatus;
+import br.gov.es.pmo.user_a_identify.model.PublicIdentityType;
 import org.junit.Before;
 import org.junit.Test;
 

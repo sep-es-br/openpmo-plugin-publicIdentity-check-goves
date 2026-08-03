@@ -1,4 +1,4 @@
-package br.gov.es.pmo.public_identity_check.goves.client;
+package br.gov.es.pmo.user_a_identify.goves.client;
 
 public interface GovesClientTokenProvider {
 

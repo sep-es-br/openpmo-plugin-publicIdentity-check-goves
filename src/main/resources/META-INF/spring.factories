@@ -1,2 +1,2 @@
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-br.gov.es.pmo.public_identity_check.goves.configuration.GovesPublicIdentityAutoConfiguration
+br.gov.es.pmo.user_a_identify.goves.configuration.GovesPublicIdentityAutoConfiguration

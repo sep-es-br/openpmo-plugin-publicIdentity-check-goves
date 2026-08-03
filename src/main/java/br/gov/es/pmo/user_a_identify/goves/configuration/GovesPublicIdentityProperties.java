@@ -1,4 +1,4 @@
-package br.gov.es.pmo.public_identity_check.goves.configuration;
+package br.gov.es.pmo.user_a_identify.goves.configuration;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

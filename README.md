@@ -54,7 +54,7 @@ cd ..\openpmo-plugin-publicIdentity_check-interface
 Artefato:
 
 ```text
-com.github.sep-es-br:openpmo-plugin-publicIdentity-check-goves:v1.0.3
+com.github.sep-es-br:openpmo-plugin-user-a-identify-goves:v2.0.0
 ```
 
 ## Licença

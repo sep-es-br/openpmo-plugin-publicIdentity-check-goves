@@ -1,7 +1,7 @@
-package br.gov.es.pmo.public_identity_check.goves.client;
+package br.gov.es.pmo.user_a_identify.goves.client;
 
 import br.gov.es.pmo.identity_parser.pmo_base.service.ClientCredentialService;
-import br.gov.es.pmo.public_identity_check.goves.configuration.GovesPublicIdentityProperties;
+import br.gov.es.pmo.user_a_identify.goves.configuration.GovesPublicIdentityProperties;
 
 public class SpringClientCredentialTokenProvider implements GovesClientTokenProvider {
 

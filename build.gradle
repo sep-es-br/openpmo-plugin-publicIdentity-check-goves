@@ -4,7 +4,7 @@ plugins {
 }
 
 group = providers.gradleProperty('group').getOrElse('br.gov.es.pmo')
-version = providers.gradleProperty('version').getOrElse('1.0.4')
+version = providers.gradleProperty('version').getOrElse('2.0.0')
 
 java {
     sourceCompatibility = JavaVersion.VERSION_1_8
@@ -18,7 +18,7 @@ repositories {
 }
 
 dependencies {
-    api 'com.github.sep-es-br:openpmo-plugin-publicIdentity-check-interface:v1.0.3'
+    api 'com.github.sep-es-br:openpmo-plugin-user-a-identify-interface:v2.0.0'
 
     implementation 'org.springframework.boot:spring-boot-autoconfigure:2.2.12.RELEASE'
     implementation 'org.springframework.security:spring-security-oauth2-client:5.2.12.RELEASE'
@@ -33,7 +33,7 @@ publishing {
     publications {
         mavenJava(MavenPublication) {
             from components.java
-            artifactId = 'openpmo-plugin-publicIdentity-check-goves'
+            artifactId = 'openpmo-plugin-user-a-identify-goves'
             pom {
                 licenses {
                     license {
