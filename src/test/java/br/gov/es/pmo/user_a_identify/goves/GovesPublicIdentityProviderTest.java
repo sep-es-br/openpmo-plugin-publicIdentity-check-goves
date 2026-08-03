@@ -4,6 +4,7 @@ import br.gov.es.pmo.user_a_identify.goves.client.GovesClientTokenProvider;
 import br.gov.es.pmo.user_a_identify.goves.client.GovesHttpGateway;
 import br.gov.es.pmo.user_a_identify.goves.client.GovesHttpResponse;
 import br.gov.es.pmo.user_a_identify.goves.configuration.GovesPublicIdentityProperties;
+import br.gov.es.pmo.user_a_identify.model.PublicAgentInfoResult;
 import br.gov.es.pmo.user_a_identify.model.PublicAgentSearchResult;
 import br.gov.es.pmo.user_a_identify.model.PublicIdentityResult;
 import br.gov.es.pmo.user_a_identify.model.PublicIdentityStatus;
@@ -47,6 +48,38 @@ public class GovesPublicIdentityProviderTest {
 
         assertEquals(PublicIdentityStatus.NOT_FOUND, result.getStatus());
         assertFalse(this.gateway.wasCalled("PUT", "/api/cidadao/12345678900/pesquisaSub"));
+    }
+
+    @Test
+    public void shouldReturnPublicAgentInformationBySub() {
+        this.gateway.respond(
+            "GET",
+            "/api/agentepublico/agent-sub",
+            200,
+            "{\"Sub\":\"agent-sub\",\"SubDescontinuado\":0,"
+                + "\"Nome\":\"Nome do agente\",\"Apelido\":\"Agente\","
+                + "\"Email\":\"agente@example.com\"}"
+        );
+
+        final PublicAgentInfoResult result =
+            this.provider.findPublicAgentInformationBySub("agent-sub");
+
+        assertEquals(PublicIdentityStatus.FOUND, result.getStatus());
+        assertEquals("agent-sub", result.getInformation().getSub());
+        assertEquals(Long.valueOf(0L), result.getInformation().getDiscontinuedSub());
+        assertEquals("Nome do agente", result.getInformation().getName());
+        assertEquals("Agente", result.getInformation().getNickname());
+        assertEquals("agente@example.com", result.getInformation().getEmail());
+    }
+
+    @Test
+    public void shouldReturnNotFoundWhenPublicAgentInformationDoesNotExist() {
+        this.gateway.respond("GET", "/api/agentepublico/agent-sub", 404, "");
+
+        final PublicAgentInfoResult result =
+            this.provider.findPublicAgentInformationBySub("agent-sub");
+
+        assertEquals(PublicIdentityStatus.NOT_FOUND, result.getStatus());
     }
 
     @Test

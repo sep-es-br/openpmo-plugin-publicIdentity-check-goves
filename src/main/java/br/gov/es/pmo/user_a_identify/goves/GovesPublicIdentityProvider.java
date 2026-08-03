@@ -7,6 +7,8 @@ import br.gov.es.pmo.user_a_identify.goves.configuration.GovesPublicIdentityProp
 import br.gov.es.pmo.user_a_identify.model.IPublicIdentityProvider;
 import br.gov.es.pmo.user_a_identify.model.OrganizationInfo;
 import br.gov.es.pmo.user_a_identify.model.PublicAgentAssignment;
+import br.gov.es.pmo.user_a_identify.model.PublicAgentInfo;
+import br.gov.es.pmo.user_a_identify.model.PublicAgentInfoResult;
 import br.gov.es.pmo.user_a_identify.model.PublicAgentSearchResult;
 import br.gov.es.pmo.user_a_identify.model.PublicAgentSummary;
 import br.gov.es.pmo.user_a_identify.model.PublicIdentityResult;
@@ -181,6 +183,47 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
         catch(final RuntimeException | IOException e) {
             return PublicIdentityResult.unavailable(null);
         }
+    }
+
+    @Override
+    public PublicAgentInfoResult findPublicAgentInformationBySub(final String sub) {
+        if(isBlank(sub)) {
+            return PublicAgentInfoResult.notFound();
+        }
+
+        try {
+            final String token = this.tokenProvider.getAcessoCidadaoToken();
+            final GovesHttpResponse agentInformationResponse = this.getAgentInformation(sub, token);
+
+            if(agentInformationResponse.getStatusCode() == HTTP_NOT_FOUND) {
+                return PublicAgentInfoResult.notFound();
+            }
+            if(agentInformationResponse.getStatusCode() != HTTP_OK) {
+                return PublicAgentInfoResult.unavailable();
+            }
+
+            final JSONObject json = new JSONObject(agentInformationResponse.getBody());
+            final PublicAgentInfo agentPublicInfo = new PublicAgentInfo(
+                value(json, "Sub", "sub"),
+                longValue(json, "SubDescontinuado", "subDescontinuado"),
+                value(json, "Nome", "nome"),
+                value(json, "Apelido", "apelido"),
+                value(json, "Email", "email")
+            );
+            return PublicAgentInfoResult.found(agentPublicInfo);
+        }
+        catch(final RuntimeException | IOException e) {
+            return PublicAgentInfoResult.unavailable();
+        }
+    }
+
+    private GovesHttpResponse getAgentInformation(final String sub, final String token) throws IOException {
+        return this.http.exchange(
+            "GET",
+            this.properties.getAcessoCidadaoBaseUrl(),
+            "/api/agentepublico/" + sub,
+            token
+        );
     }
 
     private GovesHttpResponse getPublicAgentRoles(final String sub, final String token) throws IOException {
@@ -377,6 +420,24 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
     ) {
         final String preferred = json.optString(preferredKey, null);
         return isBlank(preferred) ? json.optString(alternativeKey, null) : preferred;
+    }
+
+    private static Long longValue(
+        final JSONObject json,
+        final String preferredKey,
+        final String alternativeKey
+    ) {
+        final Object rawValue = json.has(preferredKey)
+            ? json.opt(preferredKey)
+            : json.opt(alternativeKey);
+        if(rawValue == null || JSONObject.NULL.equals(rawValue)) {
+            return null;
+        }
+        if(rawValue instanceof Number) {
+            return ((Number) rawValue).longValue();
+        }
+        final String text = String.valueOf(rawValue);
+        return isBlank(text) ? null : Long.valueOf(text);
     }
 
     private static String firstNotBlank(final String first, final String second) {
