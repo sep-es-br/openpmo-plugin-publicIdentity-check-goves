@@ -210,7 +210,6 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
             cpf,
             sub,
             name,
-            name,
             email,
             corporateEmail,
             Collections.emptyList()
@@ -244,7 +243,6 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
             cpf,
             sub,
             name,
-            name,
             email == null ? null : value(email, "email", "Email"),
             email == null ? null : value(email, "corporativo", "Corporativo"),
             Collections.singletonList(assignment)
@@ -273,22 +271,35 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
         );
     }
 
-    private PublicAgentAssignment mapAssignment(final JSONObject role) throws IOException {
-        final String organizationToken = this.tokenProvider.getOrganizationToken();
+    private PublicAgentAssignment mapAssignment(final JSONObject role) {
         final String organizationGuid = value(role, "LotacaoGuid", "lotacaoGuid");
-        OrganizationInfo organization = null;
-        if(!isBlank(organizationGuid)) {
-            organization = this.getOrganization(organizationGuid, organizationToken);
-            if(organization == null) {
-                return null;
-            }
-        }
+        final OrganizationInfo organization = this.loadOrganizationIfAvailable(organizationGuid);
         return new PublicAgentAssignment(
             value(role, "Guid", "guid"),
             value(role, "Nome", "nome"),
             value(role, "Tipo", "tipo"),
             organization
         );
+    }
+
+    private OrganizationInfo loadOrganizationIfAvailable(final String organizationGuid) {
+        if(isBlank(organizationGuid)) {
+            return null;
+        }
+        try {
+            final String organizationToken = this.tokenProvider.getOrganizationToken();
+            final OrganizationInfo organization = this.getOrganization(
+                organizationGuid,
+                organizationToken
+            );
+            if(organization != null) {
+                return organization;
+            }
+        }
+        catch(final RuntimeException | IOException ignored) {
+            // LotacaoGuid is sufficient to keep the public-agent validation available.
+        }
+        return new OrganizationInfo(organizationGuid, null, null, null, null);
     }
 
     private static JSONObject selectPrioritizedRole(final JSONArray roles) {
