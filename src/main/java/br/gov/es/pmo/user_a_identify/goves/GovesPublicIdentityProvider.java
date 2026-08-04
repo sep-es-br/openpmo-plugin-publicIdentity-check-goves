@@ -5,7 +5,6 @@ import br.gov.es.pmo.user_a_identify.goves.client.GovesHttpGateway;
 import br.gov.es.pmo.user_a_identify.goves.client.GovesHttpResponse;
 import br.gov.es.pmo.user_a_identify.goves.configuration.GovesPublicIdentityProperties;
 import br.gov.es.pmo.user_a_identify.model.IPublicIdentityProvider;
-import br.gov.es.pmo.user_a_identify.model.OrganizationInfo;
 import br.gov.es.pmo.user_a_identify.model.PublicAgentAssignment;
 import br.gov.es.pmo.user_a_identify.model.PublicAgentInfo;
 import br.gov.es.pmo.user_a_identify.model.PublicAgentInfoResult;
@@ -22,8 +21,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
 
@@ -33,7 +30,6 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
     private final GovesHttpGateway http;
     private final GovesClientTokenProvider tokenProvider;
     private final GovesPublicIdentityProperties properties;
-    private final Map<String, OrganizationInfo> organizationCache = new ConcurrentHashMap<>();
 
     public GovesPublicIdentityProvider(
         final GovesHttpGateway http,
@@ -315,34 +311,14 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
     }
 
     private PublicAgentAssignment mapAssignment(final JSONObject role) {
-        final String organizationGuid = value(role, "LotacaoGuid", "lotacaoGuid");
-        final OrganizationInfo organization = this.loadOrganizationIfAvailable(organizationGuid);
+        final String workLocationGuid = value(role, "LotacaoGuid", "lotacaoGuid");
         return new PublicAgentAssignment(
             value(role, "Guid", "guid"),
             value(role, "Nome", "nome"),
             value(role, "Tipo", "tipo"),
-            organization
+            workLocationGuid,
+            null
         );
-    }
-
-    private OrganizationInfo loadOrganizationIfAvailable(final String organizationGuid) {
-        if(isBlank(organizationGuid)) {
-            return null;
-        }
-        try {
-            final String organizationToken = this.tokenProvider.getOrganizationToken();
-            final OrganizationInfo organization = this.getOrganization(
-                organizationGuid,
-                organizationToken
-            );
-            if(organization != null) {
-                return organization;
-            }
-        }
-        catch(final RuntimeException | IOException ignored) {
-            // LotacaoGuid is sufficient to keep the public-agent validation available.
-        }
-        return new OrganizationInfo(organizationGuid, null, null, null, null);
     }
 
     private static JSONObject selectPrioritizedRole(final JSONArray roles) {
@@ -358,35 +334,6 @@ public class GovesPublicIdentityProvider implements IPublicIdentityProvider {
             }
         }
         return firstRole;
-    }
-
-    private OrganizationInfo getOrganization(
-        final String guid,
-        final String token
-    ) throws IOException {
-        final OrganizationInfo cached = this.organizationCache.get(guid);
-        if(cached != null) {
-            return cached;
-        }
-        final GovesHttpResponse response = this.http.exchange(
-            "GET",
-            this.properties.getOrganizationBaseUrl(),
-            "/organizations/" + guid + "/info",
-            token
-        );
-        if(response.getStatusCode() != HTTP_OK) {
-            return null;
-        }
-        final JSONObject json = new JSONObject(response.getBody());
-        final OrganizationInfo organization = new OrganizationInfo(
-            value(json, "guid", "Guid"),
-            value(json, "razaoSocial", "RazaoSocial"),
-            value(json, "nomeFantasia", "NomeFantasia"),
-            value(json, "sigla", "Sigla"),
-            value(json, "guidOrganizacaoPai", "GuidOrganizacaoPai")
-        );
-        this.organizationCache.put(guid, organization);
-        return organization;
     }
 
     private String findOrganizationGuid(final JSONArray organizations, final String abbreviation) {
